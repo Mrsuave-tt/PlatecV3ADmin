@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Create Admin User</title>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js"></script>
+</head>
+<body>
+    <h1>Create Admin User</h1>
+    <button onclick="createAdmin()">Create Admin User</button>
+    <div id="result"></div>
+
+    <script>
+        // Your Firebase config
+        const firebaseConfig = {
+            apiKey: "AIzaSyBKO1O-qxZ_R8HjinXSrIXBoT7c5AnQolM",
+            authDomain: "platec-projject.firebaseapp.com",
+            projectId: "platec-projject",
+            storageBucket: "platec-projject.firebasestorage.app",
+            messagingSenderId: "15595595393",
+            appId: "1:15595595393:web:a4626aef5dd4cb5b40cf80"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.getAuth();
+        const db = firebase.getFirestore();
+
+        async function createAdmin() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = 'Creating admin user...';
+
+            try {
+                console.log('Creating admin user...');
+                
+                // Create user in Firebase Auth
+                const userCredential = await firebase.createUserWithEmailAndPassword(
+                    auth, 
+                    'admin@attendance.com', 
+                    'admin123456'
+                );
+                
+                const user = userCredential.user;
+                console.log('✅ User created in Auth:', user.uid);
+                
+                // Create user document in Firestore
+                await firebase.setDoc(firebase.doc(db, 'users', user.uid), {
+                    email: 'admin@attendance.com',
+                    name: 'System Admin',
+                    role: 'admin',
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                });
+                
+                console.log('✅ Admin user created successfully!');
+                resultDiv.innerHTML = `
+                    <h3>✅ Admin User Created Successfully!</h3>
+                    <p><strong>Email:</strong> admin@attendance.com</p>
+                    <p><strong>Password:</strong> admin123456</p>
+                    <p>You can now login to the admin dashboard.</p>
+                `;
+                
+            } catch (error) {
+                console.error('❌ Error creating admin:', error);
+                
+                if (error.code === 'auth/email-already-in-use') {
+                    resultDiv.innerHTML = `
+                        <h3>Admin User Already Exists</h3>
+                        <p><strong>Email:</strong> admin@attendance.com</p>
+                        <p><strong>Password:</strong> admin123456</p>
+                        <p>You can login with these credentials.</p>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `<h3>❌ Error: ${error.message}</h3>`;
+                }
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,100 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    function isAdmin() {
+      return isSignedIn() && getUserData().role == 'admin';
+    }
+    
+    function isTeacher() {
+      return isSignedIn() && getUserData().role == 'teacher';
+    }
+    
+    function isStudent() {
+      return isSignedIn() && getUserData().role == 'student';
+    }
+    
+    function isTeacherOf(studentId) {
+      let studentData = get(/databases/$(database)/documents/users/$(studentId)).data;
+      return studentData.createdBy == request.auth.uid || studentData.assignedTeacher == request.auth.uid;
+    }
+    
+    // Users collection
+    match /users/{userId} {
+      // Read: Admin can read all, users can read their own data, Teacher can read all students, Students can read themselves
+      allow read: if isAdmin() 
+                  || userId == request.auth.uid
+                  || (isTeacher() && resource.data.role == 'student')
+                  || (isStudent() && userId == request.auth.uid);
+      
+      // Create: Admin can create any user, users can create their own document
+      allow create: if isAdmin() 
+                    || (userId == request.auth.uid && request.resource.data.keys().hasAll(['email', 'name', 'role']));
+      
+      // Update: Admin can update all, users can update their own profile
+      allow update: if isAdmin() || userId == request.auth.uid;
+      
+      // Delete: Only admin
+      allow delete: if isAdmin();
+    }
+    
+    // Attendance collection
+    match /attendance/{attendanceId} {
+      // Read: Admin can read all, Teachers can read all attendance, Students can read their own
+      allow read: if isAdmin()
+                  || isTeacher()
+                  || (isStudent() && resource.data.studentId == request.auth.uid);
+      
+      // Create: Admin or Teacher (only for their students)
+      allow create: if isAdmin()
+                    || (isTeacher() && isTeacherOf(request.resource.data.studentId));
+      
+      // Update: Admin or Teacher who marked it
+      allow update: if isAdmin()
+                    || (isTeacher() && resource.data.markedBy == request.auth.uid);
+      
+      // Delete: Only admin
+      allow delete: if isAdmin();
+    }
+    
+    // Notifications collection
+    match /notifications/{notificationId} {
+      // Read: Admin can read all, Students can read their own, Teachers can read their students'
+      allow read: if isAdmin()
+                  || (isStudent() && resource.data.studentId == request.auth.uid)
+                  || (isTeacher() && isTeacherOf(resource.data.studentId));
+      
+      // Create: Admin or Teacher (for attendance notifications)
+      allow create: if isAdmin()
+                    || (isTeacher() && request.resource.data.type == 'attendance');
+      
+      // Update: Admin, Student (mark as read), or Teacher
+      allow update: if isAdmin()
+                    || (isStudent() && resource.data.studentId == request.auth.uid && request.resource.data.keys().hasAll(['read']))
+                    || (isTeacher() && isTeacherOf(resource.data.studentId));
+      
+      // Delete: Only admin
+      allow delete: if isAdmin();
+    }
+
+    // Departments collection
+    match /departments/{departmentId} {
+      // Read: Admin, Teachers, and Students can all read departments
+      allow read: if isSignedIn();
+
+      // Create, Update, Delete: Only admin
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+  }
+}
